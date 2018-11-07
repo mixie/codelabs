@@ -1,95 +1,74 @@
-'use strict';
+// Basic fullfilment working with three DIalogflow intents: "Default Welcome Intent", "Default Fallback Intent" 
+// and "Rich intent" - needs to be added in Dialogflow in order to work
 
-const functions = require('firebase-functions'); // Cloud Functions for Firebase library
-const DialogflowApp = require('actions-on-google').DialogflowApp; // Google Assistant helper library
-exports.dialogflowFirebaseFulfillment = functions.https.onRequest((request, response) => {
-  console.log('Dialogflow Request headers: ' + JSON.stringify(request.headers));
-  console.log('Dialogflow Request body: ' + JSON.stringify(request.body));
-  if (request.body.result) {
-    processV1Request(request, response);
-  } else {
-    console.log('Invalid Request');
-    return response.status(400).end('Invalid Webhook Request (expecting v1 webhook request)');
-  }
+// imports
+const functions = require('firebase-functions');
+const { dialogflow, SimpleResponse, BrowseCarousel, BrowseCarouselItem, 
+            Suggestions, Image} = require('actions-on-google');
+
+const app = dialogflow();
+
+// handling response for 'Default Welcome Intent' 
+app.intent('Default Welcome Intent', conv => {
+  conv.ask('Hi, how are you?');
 });
 
-/*
-* Function to handle v1 webhook requests from Dialogflow
-*/
-function processV1Request (request, response) {
-  let action = request.body.result.action; // https://dialogflow.com/docs/actions-and-parameters
-  let parameters = request.body.result.parameters; // https://dialogflow.com/docs/actions-and-parameters
-  let inputContexts = request.body.result.contexts; // https://dialogflow.com/docs/contexts
-  let requestSource = (request.body.originalRequest) ? request.body.originalRequest.source : undefined;
-  const googleAssistantRequest = 'google'; // Constant to identify Google Assistant requests
-  const app = new DialogflowApp({request: request, response: response});
-  // Create handlers for Dialogflow actions as well as a 'default' handler
-  const actionHandlers = {
-    // The default welcome intent has been matched, welcome the user (https://dialogflow.com/docs/events#default_welcome_intent)
-    'input.welcome': () => {
-      // Use the Actions on Google lib to respond to Google requests; for other requests use JSON
-        sendResponse('Hello, Welcome to my Dialogflow agent with inline webhook!'); // Send simple response to user
-    },
-     // Default handler for unknown or undefined actions
-    'default': () => {
-      // Use the Actions on Google lib to respond to Google requests
-        let responseToUser = {
-          richResponse: richResponse, // Optional, uncomment to enable
-          googleOutputContexts: ['weather', 2, { ['city']: 'rome' }], // Optional, uncomment to enable
-          speech: 'This message is from Dialogflow\'s Cloud Functions for Firebase editor!', // spoken response
-          text: 'This is from Dialogflow\'s Cloud Functions for Firebase editor! :-)' // displayed response
-        };
-        sendResponse(responseToUser);
-    }
-  };
-    // If undefined or unknown action use the default handler
-  if (!actionHandlers[action]) {
-    action = 'default';
-  }
-  // Run the proper handler function to handle the request from Dialogflow
-  actionHandlers[action]();
-    // Function to send correctly formatted Google Assistant responses to Dialogflow which are then sent to the user
-  function sendResponse (responseToUser) {
-    if (typeof responseToUser === 'string') {
-      app.ask(responseToUser); // Google Assistant response
-    } else {
-      // If speech or displayText is defined use it to respond
-      let response = app.buildRichResponse().addSimpleResponse({
-        speech: responseToUser.speech || responseToUser.displayText,
-        displayText: responseToUser.displayText || responseToUser.speech
-      });
-      // Optional: Overwrite previous response with rich response
-      if (responseToUser.richResponse) {
-        response = responseToUser.richResponse;
-      }
-      // Optional: add contexts (https://dialogflow.com/docs/contexts)
-      if (responseToUser.googleOutputContexts) {
-        app.setContext(...responseToUser.googleOutputContexts);
-      }
-      console.log('Response to Dialogflow (AoG): ' + JSON.stringify(response));
-      app.ask(response); // Send response to Dialogflow and Google Assistant
-    }
-  }
-}
+// handling response for 'Default Fallback Intent'
+app.intent('Default Fallback Intent', conv => {
+  conv.ask(new SimpleResponse({
+  speech: 'Sorry, I am saying that I did not get that.',
+  text: 'Sorry, I am writing that I did not get that.',
+    }));
+  conv.ask('Can you repeat that?');
+});
 
-// Construct rich response for Google Assistant (v1 requests only)
-const app = new DialogflowApp();
-const richResponse = app.buildRichResponse()
-  .addSimpleResponse('This is the first simple response for Google Assistant')
-  .addSuggestions(
-    ['Suggestion Chip', 'Another Suggestion Chip'])
-    // Create a basic card and add it to the rich response
-  .addBasicCard(app.buildBasicCard(`This is a basic card.  Text in a
- basic card can include "quotes" and most other unicode characters
- including emoji 📱.  Basic cards also support some markdown
- formatting like *emphasis* or _italics_, **strong** or __bold__,
- and ***bold itallic*** or ___strong emphasis___ as well as other things
- like line  \nbreaks`) // Note the two spaces before '\n' required for a
-                        // line break to be rendered in the card
-    .setSubtitle('This is a subtitle')
-    .setTitle('Title: this is a title')
-    .addButton('This is a button', 'https://assistant.google.com/')
-    .setImage('https://developers.google.com/actions/images/badges/XPM_BADGING_GoogleAssistant_VER.png',
-      'Image alternate text'))
-  .addSimpleResponse({ speech: 'This is another simple response',
-    displayText: 'This is the another simple response 💁' });
+// handling response for 'Rich Intent' 
+app.intent('Rich intent', conv => {
+    
+    // adding simple response using SSML
+    const ssml = '<speak>' +
+    'Here are <say-as interpret-as="characters">SSML</say-as> samples. ' +
+    'I can pause <break time="3" />. ' +
+    'I can play a sound <audio src="https://www.example.com/MY_WAVE_FILE.wav">your wave file</audio>. ' +
+    'I can speak in cardinals. Your position is <say-as interpret-as="cardinal">10</say-as> in line. ' +
+    'Or I can speak in ordinals. You are <say-as interpret-as="ordinal">10</say-as> in line. ' +
+    'Or I can even speak in digits. Your position in line is <say-as interpret-as="digits">10</say-as>. ' +
+    'I can also substitute phrases, like the <sub alias="World Wide Web Consortium">W3C</sub>. ' +
+    'Finally, I can speak a paragraph with two sentences. ' +
+    '<p><s>This is sentence one.</s><s>This is sentence two.</s></p>' +
+    '</speak>';
+  conv.ask(ssml);
+  
+  // adding BrowseCarousel to the response
+  conv.ask(new BrowseCarousel({
+      items: [
+        new BrowseCarouselItem({
+          title: 'Dialogflow',
+          url: 'https://developers.google.com/actions/images/logo-dialogflow.png',
+          description: 'Description of item 1',
+          image: new Image({
+            url: 'https://developers.google.com/actions/images/logo-dialogflow.png',
+            alt: 'Dialogflow logo',
+          }),
+          footer: 'Item 1 footer',
+        }),
+        new BrowseCarouselItem({
+          title: 'Actions on Google',
+          url: 'https://images.techhive.com/images/article/2016/10/actionsongoogle-100685919-large.jpg',
+          description: 'Description of item 2',
+          image: new Image({
+            url: 'https://images.techhive.com/images/article/2016/10/actionsongoogle-100685919-large.jpg',
+            alt: 'AoG logo',
+          }),
+          footer: 'Item 2 footer',
+        }),
+      ],
+    }));
+    
+    // adding Suggestion chips to the response
+    conv.ask(new Suggestions('Suggestion Chips'));
+    conv.ask(new Suggestions(['suggestion 1', 'suggestion 2']));
+});
+
+
+exports.dialogflowFirebaseFulfillment = functions.https.onRequest(app);
